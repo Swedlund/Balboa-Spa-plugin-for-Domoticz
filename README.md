@@ -1,5 +1,5 @@
 # Balboa-Spa-plugin-for-Domoticz
-A Domoticz plugin to corntoll and monitor the temperature of your Balboa Spa Hot Tub.
+A Domoticz plugin for controlling and monitoring the temperature of your Balboa Spa Hot Tub.
 
 ## Prerequisites
 1. Request libary for Python 3: https://pypi.org/project/requests/
