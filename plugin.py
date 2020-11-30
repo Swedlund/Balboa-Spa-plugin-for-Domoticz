@@ -5,7 +5,7 @@
 #
 
 """
-<plugin key="Balboa" name="Balboa Spa" author="Frix" version="0.1">
+<plugin key="Balboa" name="Balboa Spa" author="Frix" version="0.2">
     <description>
         <h2>Balboa Spa - Tempature status</h2><br/>
         Creates two temp sensors that shows actual and defined temp of your Balboa Spa.
@@ -80,7 +80,9 @@ class BasePlugin:
         try:  
             status = self.getPoolStatus()
             Domoticz.Debug("Get actual temp value: "+str(status["TEMP"]))
-            Devices[1].Update(nValue=1, sValue=str(status["TEMP"]), TimedOut=0)
+            if str(status["TEMP"]) != "0.0":
+               Domoticz.Debug("Temp known => device update")
+               Devices[1].Update(nValue=1, sValue=str(status["TEMP"]), TimedOut=0)
             Domoticz.Debug("Get defined temp value: "+str(status["SET_TEMP"]))
             Devices[2].Update(nValue=1, sValue=str(status["SET_TEMP"]), TimedOut=0)
             if str(status["TEMP_RANGE"]) == "High" and Devices[3].nValue != 1:

@@ -53,8 +53,10 @@ class SpaClient:
 		self.pump2 = ('Off', 'Low', 'High')[pump_status >> 2 & 0x03]
 		self.light = 'On' if (byte_array[14] == 3) else 'Off'
 		if byte_array[2] == 255:
-			self.current_temp = 0.0 
+			self.current_temp = 0.0
 			self.set_temp = 1.0 * byte_array[20]
+			if self.temp_scale == 'Celsius':
+				self.set_temp = self.set_temp / 2.0 
 		elif self.temp_scale == 'Celsius':
 			self.current_temp = byte_array[2] / 2.0
 			self.set_temp = byte_array[20] / 2.0
