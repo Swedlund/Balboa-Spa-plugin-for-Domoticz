@@ -5,7 +5,7 @@
 #
 
 """
-<plugin key="Balboa" name="Balboa Spa" author="Frix" version="0.2">
+<plugin key="Balboa" name="Balboa Spa" author="Darrepac" version="0.3">
     <description>
         <h2>Balboa Spa - Tempature status</h2><br/>
         Creates two temp sensors that shows actual and defined temp of your Balboa Spa.
@@ -50,8 +50,14 @@ class BasePlugin:
                       "SelectorStyle": "1"}
 
             Domoticz.Device(Name="Temp range", Unit=3, TypeName="Selector Switch", Options=Options).Create()
-
+            Domoticz.Device(Name="Lights", Unit=4, TypeName="Switch").Create()
             self.updateTemp()
+        else:
+            Domoticz.Log("Devices missing")
+            if (len(Devices) == 3):
+              Domoticz.Log("Add the 4th device")
+              Domoticz.Device(Name="Lights", Unit=4, TypeName="Switch").Create()
+
         if Parameters["Mode6"] == "Debug":
             Domoticz.Debugging(1)
 
@@ -60,13 +66,18 @@ class BasePlugin:
 
     def onCommand(self, Unit, Command, Level, Hue):
         Domoticz.Debug("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-
-        tempRange = self.toggleTempRange()
+        if (Unit == 3):
+          tempRange = self.toggleTempRange()
         
-        if str(Command).lower() == "set level" and tempRange == "High":
-            Devices[Unit].Update(1,str(10))
-        else:
-            Devices[Unit].Update(0,str(0))
+          if str(Command).lower() == "set level" and tempRange == "High":
+              Devices[Unit].Update(1,str(10))
+          else:
+              Devices[Unit].Update(0,str(0))
+        if (Unit == 4):
+          light = self.toggleLights()
+          #Devices[Unit].Update(Level, str(Command)
+        #update to check the command effect
+        self.updateTemp()
 
 
     def onHeartbeat(self):
@@ -76,7 +87,7 @@ class BasePlugin:
             self.updateTemp()
 
     def updateTemp(self):
-        Domoticz.Debug("Updating temperature...")
+        Domoticz.Debug("Updating temperature now...")
         try:  
             status = self.getPoolStatus()
             Domoticz.Debug("Get actual temp value: "+str(status["TEMP"]))
@@ -89,6 +100,11 @@ class BasePlugin:
                 Devices[3].Update(1,str(10))
             elif str(status["TEMP_RANGE"]) == "Low" and Devices[3].nValue != 0:
                 Devices[3].Update(0,str(0))
+            if str(status["LIGHTS"]) == "Off" and Devices[4].nValue  != 0:
+                Devices[4].Update(0, "Off")
+            elif str(status["LIGHTS"]) == "On" and Devices[4].nValue != 1:
+                Devices[4].Update(1, "On")
+
         except:
             Domoticz.Debug("Failed to update!")
             self.lastPolled = self.pollInterval
@@ -112,6 +128,17 @@ class BasePlugin:
         except ValueError as e:
             return ""
         return output
+
+    def toggleLights(self):
+        try:
+            proc = subprocess.Popen("python3 "+self.scriptPath+"/spaclient.py "+Parameters["Address"]+" lights", shell=True,
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = proc.communicate()[0].decode('utf-8').strip()
+            Domoticz.Debug("Output: "+str(output))
+        except ValueError as e:
+            return ""
+        return output
+
 
 global _plugin
 _plugin = BasePlugin()
