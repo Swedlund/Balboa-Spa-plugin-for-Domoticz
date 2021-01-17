@@ -5,7 +5,7 @@
 #
 
 """
-<plugin key="Balboa" name="Balboa Spa" author="Darrepac" version="0.3">
+<plugin key="Balboa" name="Balboa Spa" author="Darrepac" version="0.4">
     <description>
         <h2>Balboa Spa - Tempature status</h2><br/>
         Creates two temp sensors that shows actual and defined temp of your Balboa Spa.
@@ -33,39 +33,92 @@ class BasePlugin:
 
     def __init__(self):
         self.lastPolled = 0
-        self.pollInterval = 5
+        self.pollInterval = 1
         self.scriptPath = os.path.dirname(os.path.realpath(__file__))
         return
 
     def onStart(self):
         Domoticz.Heartbeat(30)
+        Domoticz.Log("Reading SPA config and updating Domoticz...")
+        try: 
+            if (len(Devices) == 0):
+                Domoticz.Device(Name="Actual", Unit=1, TypeName="Temperature").Create()
+                Domoticz.Device(Name="Defined", Unit=2, TypeName="Temperature").Create()
 
-        if (len(Devices) == 0):
-            Domoticz.Device(Name="Actual", Unit=1, TypeName="Temperature").Create()
-            Domoticz.Device(Name="Defined", Unit=2, TypeName="Temperature").Create()
+                Options = {"LevelActions": "|",
+                           "LevelNames": "Low|High",
+                           "LevelOffHidden": "True",
+                           "SelectorStyle": "1"}
 
-            Options = {"LevelActions": "|",
-                      "LevelNames": "Low|High",
-                      "LevelOffHidden": "True",
-                      "SelectorStyle": "1"}
+                Domoticz.Device(Name="Temp range", Unit=3, TypeName="Selector Switch", Options=Options).Create()		
+                status = self.getPoolConfig()
+                if str(status["PUMP1"]) == "1":
+                    Domoticz.Device(Name="Pump 1", Unit=5, TypeName="Switch").Create()			
+                elif str(status["PUMP1"]) == "2":
+                    Options = {"LevelActions": "|",
+                               "LevelNames": "Off|Low|High",
+                               "LevelOffHidden": "False",
+                               "SelectorStyle": "0"}
+                    Domoticz.Device(Name="Pump 1", Unit=5, TypeName="Selector Switch", Options=Options).Create()
+                if str(status["PUMP2"]) == "1":
+                    Domoticz.Device(Name="Pump 2", Unit=6, TypeName="Switch").Create()			
+                elif str(status["PUMP2"]) == "2":
+                    Options = {"LevelActions": "|",
+                               "LevelNames": "Off|Low|High",
+                               "LevelOffHidden": "False",
+                               "SelectorStyle": "0"}
+                    Domoticz.Device(Name="Pump 2", Unit=6, TypeName="Selector Switch", Options=Options).Create()			   
+                if str(status["LIGHTS"]) == "1":
+                    Domoticz.Device(Name="Lights", Unit=4, TypeName="Switch").Create()
+                if str(status["BLOWER"]) == "1":
+                    Domoticz.Device(Name="Blower", Unit=7, TypeName="Switch").Create()
+                Options = {"LevelActions": "|",
+                               "LevelNames": "Ready|Rest",
+                               "LevelOffHidden": "True",
+                               "SelectorStyle": "0"}
+                Domoticz.Device(Name="Heating Mode", Unit=8, TypeName="Selector Switch", Options=Options).Create()
+                Domoticz.Device(Name="Heating", Unit=9, TypeName="Switch").Create()
+            else:
+                if (len(Devices) == 4):
+                    Domoticz.Log("Devices missing")
+                    Domoticz.Log("Add the additionnal devices")
+                    status = self.getPoolConfig()
+                    if str(status["PUMP1"]) == "1":
+                        Domoticz.Device(Name="Pump 1", Unit=5, TypeName="Switch").Create()			
+                    elif str(status["PUMP1"]) == "2":
+                        Options = {"LevelActions": "|",
+                                   "LevelNames": "Off|Low|High",
+                                   "LevelOffHidden": "False",
+                                   "SelectorStyle": "0"}
+                        Domoticz.Device(Name="Pump 1", Unit=5, TypeName="Selector Switch", Options=Options).Create()
+                    if str(status["PUMP2"]) == "1":
+                        Domoticz.Device(Name="Pump 2", Unit=6, TypeName="Switch").Create()			
+                    elif str(status["PUMP2"]) == "2":
+                        Options = {"LevelActions": "|",
+                                   "LevelNames": "Off|Low|High",
+                                   "LevelOffHidden": "False",
+                                   "SelectorStyle": "0"}
+                        Domoticz.Device(Name="Pump 2", Unit=6, TypeName="Selector Switch", Options=Options).Create()
+                    if str(status["BLOWER"]) == "1":
+                        Domoticz.Device(Name="Blower", Unit=7, TypeName="Switch").Create()
+                    Options = {"LevelActions": "|",
+                               "LevelNames": "Ready|Rest",
+                               "LevelOffHidden": "True",
+                               "SelectorStyle": "0"}
+                    Domoticz.Device(Name="Heating Mode", Unit=8, TypeName="Selector Switch", Options=Options).Create()
+                    Domoticz.Device(Name="Heating", Unit=9, TypeName="Switch").Create()
 
-            Domoticz.Device(Name="Temp range", Unit=3, TypeName="Selector Switch", Options=Options).Create()
-            Domoticz.Device(Name="Lights", Unit=4, TypeName="Switch").Create()
             self.updateTemp()
-        else:
-            Domoticz.Log("Devices missing")
-            if (len(Devices) == 3):
-              Domoticz.Log("Add the 4th device")
-              Domoticz.Device(Name="Lights", Unit=4, TypeName="Switch").Create()
-
-        if Parameters["Mode6"] == "Debug":
-            Domoticz.Debugging(1)
+            if Parameters["Mode6"] == "Debug":
+               Domoticz.Debugging(1)
+        except:
+            Domoticz.Error("Failed to get config!")
 
     def onStop(self):
         Domoticz.Log("onStop called")
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Debug("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
         if (Unit == 3):
           tempRange = self.toggleTempRange()
         
@@ -76,6 +129,8 @@ class BasePlugin:
         if (Unit == 4):
           light = self.toggleLights()
           #Devices[Unit].Update(Level, str(Command)
+
+
         #update to check the command effect
         self.updateTemp()
 
@@ -87,14 +142,13 @@ class BasePlugin:
             self.updateTemp()
 
     def updateTemp(self):
-        Domoticz.Debug("Updating temperature now...")
+        Domoticz.Log("Updating temperature now...")
         try:  
             status = self.getPoolStatus()
-            Domoticz.Debug("Get actual temp value: "+str(status["TEMP"]))
+            Domoticz.Log("Get actual temp value: "+str(status["TEMP"]))
             if str(status["TEMP"]) != "0.0":
-               Domoticz.Debug("Temp known => device update")
+               Domoticz.Log("Temp known => device update")
                Devices[1].Update(nValue=1, sValue=str(status["TEMP"]), TimedOut=0)
-            Domoticz.Debug("Get defined temp value: "+str(status["SET_TEMP"]))
             Devices[2].Update(nValue=1, sValue=str(status["SET_TEMP"]), TimedOut=0)
             if str(status["TEMP_RANGE"]) == "High" and Devices[3].nValue != 1:
                 Devices[3].Update(1,str(10))
@@ -104,9 +158,31 @@ class BasePlugin:
                 Devices[4].Update(0, "Off")
             elif str(status["LIGHTS"]) == "On" and Devices[4].nValue != 1:
                 Devices[4].Update(1, "On")
+            if str(status["HEATING_MODE"]) == "Rest" and Devices[8].nValue != 1:
+                Devices[8].Update(1,str(10))
+            elif str(status["HEATING_MODE"]) == "Ready" and Devices[8].nValue != 0:
+                Devices[8].Update(0,str(0))
+            if str(status["HEATING"]) == "Off" and Devices[9].nValue  != 0:
+                Devices[9].Update(0, "Off")
+            elif str(status["HEATING"]) == "On" and Devices[9].nValue != 1:
+                Devices[9].Update(1, "On")
+            if str(status["PUMP1"]) == "Off" and Devices[5].nValue != 0:
+                Devices[5].Update(0,str(0))
+            elif str(status["PUMP1"]) == "Low" and Devices[5].nValue != 1:
+                Devices[5].Update(1,str(10))
+            elif str(status["PUMP1"]) == "High" and Devices[5].nValue != 2:
+                Devices[5].Update(2,str(20))
+            if str(status["PUMP2"]) == "Off" and Devices[6].nValue  != 0:
+                Devices[6].Update(0, "Off")
+            elif str(status["PUMP2"]) == "High" and Devices[6].nValue != 1:
+                Devices[6].Update(1, "On")
+            if str(status["BLOWER"]) == "Off" and Devices[7].nValue  != 0:
+                Devices[7].Update(0, "Off")
+            elif str(status["BLOWER"]) == "High" and Devices[7].nValue != 1:
+                Devices[7].Update(1, "On")
 
         except:
-            Domoticz.Debug("Failed to update!")
+            Domoticz.Error("Failed to update!")
             self.lastPolled = self.pollInterval
 
     def getPoolStatus(self):
@@ -114,7 +190,17 @@ class BasePlugin:
             proc = subprocess.Popen("python3 "+self.scriptPath+"/spaclient.py "+Parameters["Address"]+" status", shell=True,
                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = json.loads(proc.communicate()[0].decode('utf-8').strip())
-            Domoticz.Debug("Output: "+str(output))
+            Domoticz.Log("Output: "+str(output))
+        except ValueError as e:
+            return ""
+        return output
+
+    def getPoolConfig(self):
+        try:
+            proc = subprocess.Popen("python3 "+self.scriptPath+"/spaclient.py "+Parameters["Address"]+" config", shell=True,
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = json.loads(proc.communicate()[0].decode('utf-8').strip())
+            Domoticz.Log("Output: "+str(output))
         except ValueError as e:
             return ""
         return output
@@ -124,7 +210,7 @@ class BasePlugin:
             proc = subprocess.Popen("python3 "+self.scriptPath+"/spaclient.py "+Parameters["Address"]+" temprange", shell=True,
                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = proc.communicate()[0].decode('utf-8').strip()
-            Domoticz.Debug("Output: "+str(output))
+            Domoticz.Log("Output: "+str(output))
         except ValueError as e:
             return ""
         return output
@@ -134,7 +220,7 @@ class BasePlugin:
             proc = subprocess.Popen("python3 "+self.scriptPath+"/spaclient.py "+Parameters["Address"]+" lights", shell=True,
                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = proc.communicate()[0].decode('utf-8').strip()
-            Domoticz.Debug("Output: "+str(output))
+            Domoticz.Log("Output: "+str(output))
         except ValueError as e:
             return ""
         return output
