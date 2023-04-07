@@ -2,6 +2,7 @@ import sys
 import crc8
 import logging
 import socket
+import traceback
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class SpaClient:
 		self.priming = False
 		self.time_scale = "12 Hr"
 		self.heating = False
+		self.blower = ""
 
 	s = None
 
@@ -35,7 +37,28 @@ class SpaClient:
 			SpaClient.s.connect((hostname, 4257))
 			SpaClient.s.setblocking(0)
 		return SpaClient.s
-
+	def handle_configuration(self, byte_array):
+		pumpall=[]
+		print ("{")
+		for i in range (4):
+			#print (byte_array[0]>>(i*2))
+			pumpall.append((byte_array[0]>>(i*2)) & 0x03)
+			print ('"PUMP'+str(i+1)+'": "'+ str(pumpall[i])+'",')
+		
+		if (byte_array[2] & 0x03) != 0:
+			lights = 1
+		else:
+			lights = 0
+		print ('"LIGHTS": "'+str(lights)+'",')
+		
+		if (byte_array[3] & 0x03) != 0:
+			blower = 1
+		else:
+			blower = 0
+		print ('"BLOWER": "'+str(blower)+'"')
+		print("}")
+		return True
+	
 	def handle_status_update(self, byte_array):
 		self.priming = byte_array[1] & 0x01 == 1
 		self.hour = byte_array[3]
@@ -53,15 +76,18 @@ class SpaClient:
 		self.pump2 = ('Off', 'Low', 'High')[pump_status >> 2 & 0x03]
 		self.light = 'On' if (byte_array[14] == 3) else 'Off'
 		if byte_array[2] == 255:
-			self.current_temp = 0.0 
+			self.current_temp = 0.0
 			self.set_temp = 1.0 * byte_array[20]
+			if self.temp_scale == 'Celsius':
+				self.set_temp = self.set_temp / 2.0 
 		elif self.temp_scale == 'Celsius':
 			self.current_temp = byte_array[2] / 2.0
 			self.set_temp = byte_array[20] / 2.0
 		else:
 			self.current_temp = 1.0 * byte_array[2]
 			self.set_temp = 1.0 * byte_array[20]
-
+		flag5 = byte_array[13]
+		self.blower = 'On' if (flag5 & 0x0C == 1) else 'Off'
 	def get_set_temp(self):
 		return self.set_temp
 
@@ -90,8 +116,8 @@ class SpaClient:
 			(format(self.current_temp, '.1f'), format(self.set_temp, '.1f'), self.hour, self.minute)
 		s = s + '"PRIMING": "%s",\n"HEATING_MODE": "%s",\n"TEMP_SCALE": "%s",\n"TIME_SCALE": "%s",\n' % \
 			(self.priming, self.heating_mode, self.temp_scale, self.time_scale)
-		s = s + '"HEATING": "%s",\n"TEMP_RANGE": "%s",\n"PUMP1": "%s",\n"PUMP2": "%s",\n"LIGHTS": "%s"\n' % \
-			(self.heating, self.temp_range, self.pump1, self.pump2, self.light)
+		s = s + '"HEATING": "%s",\n"TEMP_RANGE": "%s",\n"PUMP1": "%s",\n"PUMP2": "%s",\n"LIGHTS": "%s",\n"BLOWER": "%s"\n' % \
+			(self.heating, self.temp_range, self.pump1, self.pump2, self.light, self.blower)
 		s = s + "}\n"
 		return s
 
@@ -104,7 +130,7 @@ class SpaClient:
 		checksum = checksum ^ 0x02
 		return checksum
 
-	def read_msg(self):
+	def read_msg(self, value):
 		chunks = []
 		try:
 			len_chunk = self.s.recv(2)
@@ -122,15 +148,26 @@ class SpaClient:
 		chunks.append(len_chunk)
 		chunks.append(chunk)
 
+		#print ("check message type")
 		# Status update prefix
-		if chunk[0:3] == b'\xff\xaf\x13':
+		if chunk[0:3] == b'\xff\xaf\x13' and value == 0:
 				# print("Status Update")
+				#print(" ".join(hex(n) for n in chunk))
 				self.handle_status_update(chunk[3:])
-
-		return True
+				return 1
+		if chunk[0:3] == b'\x0a\xbf\x2e' and value == 1:
+				#print ("Configuration response")
+				#print(" ".join(hex(n) for n in chunk))
+				self.handle_configuration(chunk[3:])
+				return 2
+		return False
 
 	def read_all_msg(self):
-		while (self.read_msg()):
+		while (self.read_msg(0) != 1):
+			True
+
+	def read_conf_msg(self):
+		while (self.read_msg(1) != 2):
 			True
 
 	def send_message(self, type, payload):
@@ -139,11 +176,11 @@ class SpaClient:
 		prefix = b'\x7e'
 		message = prefix + bytes([length]) + type + payload + \
 			bytes([checksum]) + prefix
-		#print(message)
 		self.s.send(message)
 
 	def send_config_request(self):
-		self.send_message(b'\x0a\xbf\x04', bytes([]))
+		#settins request
+		self.send_message(b'\x0a\xbf\x22', b'\x00\x00\x01')
 
 	def send_toggle_message(self, item):
 		# 0x04 - pump 1
@@ -214,7 +251,10 @@ class SpaClient:
 import time
 try:
 	c = SpaClient(SpaClient.get_socket(sys.argv[1]))
-
+	if str(sys.argv[2]) == "config": #config
+		time.sleep(1)
+		c.send_config_request()
+		c.read_conf_msg()
 	if str(sys.argv[2]) == "status": #status
 		time.sleep(1)
 		c.read_all_msg()
@@ -241,4 +281,5 @@ try:
 		c.read_all_msg()
 		print(c.get_temp_range())
 except:
+	traceback.print_exc() 
 	print("Error in spaclient!")
